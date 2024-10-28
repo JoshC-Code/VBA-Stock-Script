@@ -1,0 +1,115 @@
+Option Explicit
+
+Sub StockChecker()
+
+    Dim objRequest As Object
+    Dim strUrl As String
+    Dim blnAsync As Boolean
+    Dim strResponse As String
+    Dim ticker As String
+    Dim ApiUrl As String
+    Dim EndUrl As String
+    Dim DateCell As String
+    Dim jsonString As String
+    Dim extractText As Double
+    Dim Counter
+    Dim TickerAmt As Integer
+    Dim CellValue As Integer
+    Dim OpenCell As String
+    Dim CloseCell As String
+    Dim TickerCell As String
+    Dim DifferenceCell As String
+    Dim TopStock As String
+    Dim Difference As Double
+    Dim StockDifference As Double
+    Dim status As String
+    Dim StockDate As Date
+    Dim StockWeekDay As Integer
+    
+    TopStock = Range("c5").value
+    Counter = 0
+    TickerAmt = CInt(Range("b1").value)
+While Counter < TickerAmt
+    ApiUrl = "https://api.polygon.io/v1/open-close/"
+    TickerCell = "a" + CStr(5 + Counter)
+    ticker = Range(TickerCell).value
+    DateCell = Range("b2").Text
+    EndUrl = "/" + DateCell + "?adjusted=true&apiKey=7CWJp2qQ7yqicBpo9aaPA3uFYu_QmsK2"
+    
+    Set objRequest = CreateObject("MSXML2.XMLHTTP")
+    strUrl = ApiUrl + ticker + EndUrl
+    blnAsync = True
+
+    With objRequest
+        .Open "GET", strUrl, blnAsync
+        .SetRequestHeader "Content-Type", "application/json"
+        .Send
+        'spin wheels whilst waiting for response
+        While objRequest.readyState <> 4
+            DoEvents
+        Wend
+        
+        strResponse = .responseText
+    End With
+    
+    status = ExtractJSONValue(strResponse, "status")
+    
+    If status = "ERROR" Then MsgBox "Exceeded the maximum requests per minute, please wait or reduce the number of tickers"
+    If status = "ERROR" Then End
+    If status = "NOT_FOUND" Then MsgBox "Check if date is a weekend, or there is an incorrect ticker on cell A" + CStr(5 + Counter)
+    If status = "NOT_FOUND" Then End
+    
+    OpenCell = "b" + CStr(5 + Counter)
+    CloseCell = "c" + CStr(5 + Counter)
+    DifferenceCell = "d" + CStr(5 + Counter)
+    Range(OpenCell).value = ExtractJSONValue(strResponse, "open")
+    Range(CloseCell).value = ExtractJSONValue(strResponse, "close")
+    Difference = ExtractJSONValue(strResponse, "close") - ExtractJSONValue(strResponse, "open")
+    Range(DifferenceCell).value = Difference
+    
+    If Counter = 0 Then StockDifference = Difference
+    If Counter > 0 And Difference > StockDifference Then
+        StockDifference = Difference
+        TopStock = ticker
+    End If
+    
+    Counter = Counter + 1
+    Debug.Print strResponse
+Wend
+    
+Range("f4").value = TopStock
+Range("g4").value = StockDifference
+
+End Sub
+
+Function ExtractJSONValue(jsonString As String, key As String) As String
+    Dim keyPos As Long
+    Dim valueStart As Long
+    Dim valueEnd As Long
+    Dim value As String
+    
+    ' Locate the key in the JSON string
+    keyPos = InStr(jsonString, """" & key & """:")
+    If keyPos = 0 Then Exit Function ' Key not found
+
+    ' Find the start of the value after the key
+    valueStart = InStr(keyPos, jsonString, ":") + 1
+
+    ' Check if the value is a string (starts with a quote)
+    If Mid(jsonString, valueStart, 1) = """" Then
+        valueStart = valueStart + 1
+        valueEnd = InStr(valueStart, jsonString, """") - 1
+    Else
+        ' For numeric values, find the end of the number
+        valueEnd = valueStart
+        Do While Mid(jsonString, valueEnd, 1) Like "[0-9.e+-]"
+            valueEnd = valueEnd + 1
+        Loop
+        valueEnd = valueEnd - 1
+    End If
+
+    ' Extract the value
+    value = Mid(jsonString, valueStart, valueEnd - valueStart + 1)
+    ExtractJSONValue = value
+End Function
+
